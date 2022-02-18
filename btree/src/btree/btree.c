@@ -20,20 +20,20 @@ typedef struct NodePair {
     void *promoted_key;
 } NodePair;
 
-static Node *node(uint32_t max_order) {
+static Node *node(uint32_t min_order) {
     Node *n = malloc(sizeof(Node));
-    n->children = slice(max_order);
-    n->data = slice(max_order - 1);
+    n->children = slice(2 * min_order);
+    n->data = slice(2 * min_order - 1);
     n->leaf = true;
-    n->order = max_order;
+    n->order = min_order;
     return n;
 }
 
-static Node *make_node(Slice *data, Slice *children, uint32_t max_order) {
+static Node *make_node(Slice *data, Slice *children, uint32_t min_order) {
     Node *n = malloc(sizeof(Node));
     n->children = children;
     n->data = data;
-    n->order = max_order;
+    n->order = min_order;
     n->leaf = true;
     return n;
 }
@@ -46,9 +46,9 @@ static NodePair *node_pair(Node *first, Node *second, void *promoted_key) {
     return np;
 }
 
-BTree *btree(uint32_t max_order) {
+BTree *btree(uint32_t min_order) {
     BTree *t = malloc(sizeof(BTree));
-    t->order = max_order;
+    t->order = min_order;
     t->root = node(t->order);
     return t;
 }
@@ -58,7 +58,7 @@ Node *root(BTree *tree) {
 }
 
 static bool full(Node *n) {
-    return len(n->data) == n->order - 1;
+    return len(n->data) == 2 * n->order - 1;
 }
 
 void test_print(const void *key) {
@@ -83,9 +83,8 @@ static NodePair *split(Node *n) {
     Node *right = make_node(right_data, slice(n->order), n->order);
 
     if (!n->leaf) {
-        uint32_t left_children_length = n->order % 2 == 0 ? len(n->children) / 2 : len(n->children) / 2 + 1;
-        Slice *left_children = sslice(n->children, 0, left_children_length);
-        Slice *right_children = sslice(n->children, left_children_length, len(n->children));
+        Slice *left_children = sslice(n->children, 0, len(n->children) / 2);
+        Slice *right_children = sslice(n->children, len(n->children) / 2, len(n->children));
         left->children = left_children;
         right->children = right_children;
         left->leaf = false;
@@ -137,7 +136,7 @@ void insert(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
 }
 
 void *delete(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
-    
+
 }
 
 void preorder(Node *root, void(*printfunc)(const void *)) {

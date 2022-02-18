@@ -17,7 +17,7 @@ int compare_double(const void *first, const void *second) {
 }
 
 int main() {
-    BTree *tree1 = btree(6);
+    BTree *tree1 = btree(3);
     double a = 100;
     double b = 200;
     double c = 300;
