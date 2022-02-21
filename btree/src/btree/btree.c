@@ -15,10 +15,34 @@ typedef struct BTree {
     uint32_t order;
 } BTree;
 
+typedef struct Loc {
+    Node *node;
+    KeyIndex *kx;
+} Loc;
+
+uint32_t loc_index(Loc *l) {
+    return kx_index(l->kx);
+}
+
+void *loc_key(Loc *l) {
+    return kx_key(l->kx);
+}
+
+Node *loc_node(Loc *l) {
+    return l->node;
+}
+
 typedef struct NodePair {
     Node *first, *second;
     void *promoted_key;
 } NodePair;
+
+static Loc *loc(Node *n, KeyIndex *kx) {
+    Loc *l = malloc(sizeof(Loc));
+    l->node = n;
+    l->kx = kx;
+    return l;
+}
 
 static Node *node(uint32_t min_order) {
     Node *n = malloc(sizeof(Node));
@@ -62,7 +86,18 @@ static bool full(Node *n) {
 }
 
 void test_print(const void *key) {
-    printf("%f\t", *(double *) key);
+    printf("%d\t", *(int *) key);
+}
+
+Loc *search(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    KeyIndex *kx = find_index(root->data, key, cmpfunc);
+    if (kx_key(kx)) return loc(root, kx);
+    if (!kx_key(kx) && root->leaf) {
+        printf("key not found!\n");
+        return loc(root, key_index(NULL, kx_index(kx)));
+    }
+    if (!kx_key(kx)) return search((Node *) get_index(root->children, kx_index(kx)), key, cmpfunc);
+    return loc(root, key_index(NULL, kx_index(kx)));
 }
 
 static NodePair *split(Node *n) {
@@ -135,8 +170,169 @@ void insert(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
     insert_non_full(r, key, cmpfunc);
 }
 
-void *delete(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
+BTree *make_btree(void *keys, uint32_t num_keys, uint32_t min_order, size_t key_size,
+                  int(*cmpfunc)(const void *, const void *)) {
+    BTree *tree = btree(min_order);
+    for (int i = 0; i < num_keys; i++) insert(tree, keys + i * key_size, cmpfunc);
+    return tree;
+}
 
+void transfer_key_right(Node *n, uint32_t i) {
+    Node *right_child = (Node *) get_index(n->children, i + 1);
+    Node *left_child = (Node *) get_index(n->children, i);
+    void *key_to_promote = pop(left_child->data);
+    if (len(left_child->children) > 0) {
+        Node *child_to_transfer = pop(left_child->children);
+        unshift(right_child->children, child_to_transfer);
+    }
+    void *key_to_demote = (void *) get_index(n->data, i);
+    unshift(right_child->data, key_to_demote);
+    set_index(n->data, key_to_promote, i);
+}
+
+void transfer_key_left(Node *n, uint32_t i) {
+    Node *left_child = (Node *) get_index(n->children, i);
+    Node *right_child = (Node *) get_index(n->children, i + 1);
+    void *key_to_promote = shift(right_child->data);
+    if (len(right_child->children) > 0) {
+        Node *child_to_transfer = shift(right_child->children);
+        push(left_child->children, child_to_transfer);
+    }
+    void *key_to_demote = (void *) get_index(n->data, i);
+    push(left_child->data, key_to_demote);
+    set_index(n->data, key_to_promote, i);
+}
+
+Loc *predecessor_helper(Loc *l) {
+    Node *adjacent_left_child = (Node *) get_index(l->node->children, loc_index(l));
+    while (!adjacent_left_child->leaf) {
+        adjacent_left_child = (Node *) last(adjacent_left_child->children);
+    }
+    return loc(adjacent_left_child,
+               key_index((void *) last(adjacent_left_child->data), len(adjacent_left_child->data) - 1));
+}
+
+Loc *inorder_predecessor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    Loc *l = search(root, key, cmpfunc);
+    if (!l->kx) {
+        printf("cannot find inorder predecessor of nonexistent node!\n");
+        return loc(root, NULL);
+    }
+    if (l->node->leaf) return loc(root, l->kx);
+    return predecessor_helper(loc(root, l->kx));
+}
+
+Loc *successor_helper(Loc *l) {
+    Node *adjacent_right_child = (Node *) get_index(l->node->children, loc_index(l) + 1);
+    while (!adjacent_right_child->leaf) {
+        adjacent_right_child = (Node *) first(adjacent_right_child->children);
+
+    }
+    return loc(adjacent_right_child, key_index((void *) first(adjacent_right_child->data), 0));
+}
+
+Loc *inorder_successor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    Loc *l = search(root, key, cmpfunc);
+    if (!l->kx) {
+        printf("cannot find inorder successor of nonexistent node!\n");
+        return loc(root, NULL);
+    }
+    if (l->node->leaf) return loc(root, l->kx);
+    return successor_helper(loc(root, l->kx));
+}
+
+static bool has_left_sibling(Loc *l) {
+    return loc_index(l) != 0;
+}
+
+static bool has_right_sibling(Loc *l) {
+    return loc_index(l) != len(l->node->children) - 1;
+}
+
+static Loc *search_node(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    KeyIndex *kx = find_index(root->data, key, cmpfunc);
+    return loc(root, kx);
+}
+
+static Node *get_child(Node *n, uint32_t index) {
+    return (Node *) get_index(n->children, index);
+}
+
+static bool required_keys(Node *n) {
+    return len(n->data) >= n->order;
+}
+
+static void shift_key_left(Node *root, uint32_t index) {
+    const void *root_key = get_index(root->data, index);
+    Node *left_child = (Node *) get_index(root->children, index);
+    Node *right_child = (Node *) get_index(root->children, index + 1);
+    set_index(root->data, shift(right_child->data), index);
+    push(left_child->data, (void *) root_key);
+    if (len(right_child->children) > 0) push(left_child->children, shift(right_child->children));
+}
+
+static void shift_key_right(Node *root, uint32_t index) {
+    const void *root_key = get_index(root->data, index - 1);
+    Node *left_child = (Node *) get_index(root->children, index - 1);
+    Node *right_child = (Node *) get_index(root->children, index);
+    set_index(root->data, pop(left_child->data), index - 1);
+    unshift(right_child->data, (void *) root_key);
+    if (len(left_child->children) > 0) unshift(right_child->children, pop(left_child->children));
+}
+
+static void merge_nodes_at_median(Node *root, uint32_t index) {
+    void *root_key = remove_index(root->data, index);
+    Node *left_child = (Node *) get_index(root->children, index);
+    Node *right_child = (Node *) get_index(root->children, index + 1);
+    push(left_child->data, root_key);
+    join(left_child->data, right_child->data);
+    remove_index(root->children, index + 1);
+    if (len(left_child->children) > 0) join(left_child->children, right_child->children);
+}
+
+static void *single_pass_delete(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    KeyIndex *kx = find_index(root->data, key, cmpfunc);
+    if (root->leaf && !kx_key(kx)) return NULL;
+    if (root->leaf && kx_key(kx)) return remove_index(root->data, kx_index(kx));
+    Node *root_ci = get_child(root, kx_index(kx));
+    Node *root_ci_left = (Node *) get_index(root->children, kx_index(kx) - 1);
+    Node *root_ci_right = (Node *) get_index(root->children, kx_index(kx) + 1);
+    Loc *inorder_loc;
+    if (!kx_key(kx)) {
+        if (!required_keys(root_ci)) {
+            if (root_ci_left && required_keys(root_ci_left)) {
+                shift_key_right(root, kx_index(kx));
+            } else if (root_ci_right && required_keys(root_ci_right)) {
+                shift_key_left(root, kx_index(kx));
+            } else {
+                printf("here\n");
+                printf("%d\n", kx_index(kx));
+                for (int i = 0; i < len(root_ci_left->data); i++)
+                    unshift(root->data, (void *) get_index(root_ci_left->data, i));
+                root_ci_right ? join(root->data, root_ci_right->data) : root->data;
+                root_ci_right && len(root_ci_right->children) > 0 ? join(root->children, root_ci_right->children)
+                                                                  : root->children;
+                print(root->data, &test_print);
+            }
+        }
+    } else {
+        if (root_ci_left && required_keys(root_ci_left)) {
+            inorder_loc = inorder_predecessor(root_ci, key, cmpfunc);
+            set_index(root_ci->data, loc_key(inorder_loc), kx_index(kx));
+            return single_pass_delete(inorder_loc->node, loc_key(inorder_loc), cmpfunc);
+        } else if (root_ci_right && required_keys(root_ci_right)) {
+            inorder_loc = inorder_successor(root_ci, key, cmpfunc);
+            set_index(root_ci->data, loc_key(inorder_loc), kx_index(kx));
+            return single_pass_delete(inorder_loc->node, loc_key(inorder_loc), cmpfunc);
+        } else {
+            merge_nodes_at_median(root, kx_index(kx));
+        }
+    }
+    return single_pass_delete(root_ci, key, cmpfunc);
+}
+
+void *delete(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
+    return single_pass_delete(tree->root, key, cmpfunc);
 }
 
 void preorder(Node *root, void(*printfunc)(const void *)) {
@@ -148,8 +344,7 @@ void preorder(Node *root, void(*printfunc)(const void *)) {
     }
 }
 
-void test(Node *root, void(*printfunc)(const void *)) {
-    print(root->data, printfunc);
-    print(((Node *) get_index(root->children, 0))->data, printfunc);
-    print(((Node *) get_index(root->children, 1))->data, printfunc);
+void test(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    KeyIndex *kx = find_index(root->data, key, cmpfunc);
+    printf("%d\n", kx_index(kx));
 }

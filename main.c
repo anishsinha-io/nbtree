@@ -16,49 +16,16 @@ int compare_double(const void *first, const void *second) {
     return 0;
 }
 
-int main() {
-    BTree *tree1 = btree(3);
-    double a = 100;
-    double b = 200;
-    double c = 300;
-    double d = 400;
-    double e = 500;
-    double f = 600;
-    double g = 700;
-    double h = 800;
-    double i = 900;
-    double j = 1000;
-    double k = 1100;
-    double l = 1200;
-    double m = 50;
-    double n = 75;
-    double o = 80;
-    double p = 90;
-    double q = 110;
-    double r = 120;
-    double s = 130;
-    double t = 450;
-    insert(tree1, &a, &compare_double);
-    insert(tree1, &b, &compare_double);
-    insert(tree1, &c, &compare_double);
-    insert(tree1, &d, &compare_double);
-    insert(tree1, &e, &compare_double);
-    insert(tree1, &f, &compare_double);
-    insert(tree1, &g, &compare_double);
-    insert(tree1, &h, &compare_double);
-    insert(tree1, &i, &compare_double);
-    insert(tree1, &j, &compare_double);
-    insert(tree1, &k, &compare_double);
-    insert(tree1, &l, &compare_double);
-    insert(tree1, &m, &compare_double);
-    insert(tree1, &n, &compare_double);
-    insert(tree1, &o, &compare_double);
-    insert(tree1, &p, &compare_double);
-    insert(tree1, &q, &compare_double);
-    insert(tree1, &r, &compare_double);
-    insert(tree1, &s, &compare_double);
-    insert(tree1, &t, &compare_double);
-    preorder(root(tree1), &print_double);
+int compare_int(const void *first, const void *second) {
+    return *(int *) first - *(int *) second;
+}
 
+int main() {
+    int a = 120;
+    BTree *tree1 = make_btree(
+            (int[]) {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200}, 20, 2,
+            sizeof(int), &compare_int);
+    delete(tree1, &a, &compare_int);
+    preorder(root(tree1), &print_int);
     return 0;
 }
