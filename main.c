@@ -20,9 +20,9 @@ int compare_int(const void *first, const void *second) {
 }
 
 int main() {
-    int a = 6;
+    int a = 7;
     BTree *tree1 = make_btree(
-            (int[]) {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, 10, 2,
+            (int[]) {10, 9, 8, 7, 6, 5, 4, 3, 2}, 9, 2,
             sizeof(int), &compare_int);
     preorder(root(tree1), &print_int);
     printf("\n");

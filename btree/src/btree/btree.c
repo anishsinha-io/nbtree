@@ -247,36 +247,43 @@ static void transfer_key_right(Node *root, uint32_t index) {
 static void *single_pass_delete(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
     KeyIndex *kx = find_index(root->data, key, cmpfunc);
     if (root->leaf && !kx_key(kx)) return NULL;
-    if (root->leaf && kx_key(kx)) return remove_index(root->data, kx_index(kx));
+    if (root->leaf && kx_key(kx)) {
+        return remove_index(root->data, kx_index(kx));
+    }
     Node *root_ci = (Node *) get_index(root->children, kx_index(kx));
     Node *root_ci_left = (Node *) get_index(root->children, kx_index(kx) - 1);
     Node *root_ci_right = (Node *) get_index(root->children, kx_index(kx) + 1);
 
-    // if the child (root sub c(i)) has fewer than the required number of children
     if (kx_key(kx)) {
         // any key which is in a non-leaf node will have an inorder predecessor and successor.
         Loc *inorder_p = inorder_predecessor(root, key, cmpfunc);
         Loc *inorder_s = inorder_successor(root, key, cmpfunc);
-        if (len(inorder_p->node->data) >= inorder_p->node->order) {
+        if (len(root_ci->data) >= inorder_p->node->order) {
             const void *pred = last(inorder_p->node->data);
-            set_index(root->data, (void *) pred, kx_index(kx));
-            return single_pass_delete(inorder_p->node, key, cmpfunc);
-        } else if (len(inorder_s->node->data) >= inorder_p->node->order) {
-            const void *succ = last(inorder_p->node->data);
-            set_index(root->data, (void *) succ, kx_index(kx));
-            return single_pass_delete(inorder_s->node, key, cmpfunc);
+            void *deleted_key = single_pass_delete(root, (void *) pred, cmpfunc);
+            set_index(root->data, (void *) deleted_key, kx_index(kx));
+            return deleted_key;
+        } else if (len(root_ci_right->data) >= inorder_p->node->order) {
+            const void *succ = first(inorder_s->node->data);
+            void *deleted_key = single_pass_delete(root, (void *) succ, cmpfunc);
+            set_index(root->data, (void *) deleted_key, kx_index(kx));
+            return deleted_key;
         } else {
-            // we have to merge the nodes that contain the inorder predecessor and inorder successor around the key at
-            // the index we found, then recursively delete from there.
-            void *key_to_demote = remove_index(root->data, kx_index(kx));
-            push(inorder_p->node->data, key_to_demote);
-            join(inorder_p->node->data, inorder_s->node->data);
-            if (len(inorder_p->node->children) > 0) {
-                join(inorder_p->node->children, inorder_s->node->children);
+            print(root->data, &test_print);
+            print(root_ci->data, &test_print);
+            // print(root_ci_left->data, &test_print);
+            print(root_ci_right->data, &test_print);
+            push(root_ci->data, remove_index(root->data, kx_index(kx)));
+            join(root_ci->data, root_ci_right->data);
+            if (len(root_ci->children) > 0) {
+                join(root_ci->children, root_ci_right->children);
             }
-            remove_index(root->children, kx_index(kx) + 1);
+            if (len(root->data) == 0) {
+                root = root_ci;
+                remove_index(root_ci->children, kx_index(kx) + 1);
+            }
+            return single_pass_delete(root, key, cmpfunc);
         }
-        return single_pass_delete(inorder_p->node, key, cmpfunc);
     }
     if (len(root_ci->data) < root_ci->order) {
         if (kx_index(kx) != 0 && kx_index(kx) < len(root->data)) {
@@ -329,7 +336,7 @@ static void *single_pass_delete(Node *root, void *key, int(*cmpfunc)(const void 
                         Slice *new_children = join(root_ci->children, root_ci_right->children);
                         root->children = new_children;
                     }
-                    remove_index(root->children, kx_index(kx) + 1);
+                    root->data = root_ci->data;
                 }
             }
         }
