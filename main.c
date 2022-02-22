@@ -21,7 +21,7 @@ int compare_int(const void *first, const void *second) {
 }
 
 int main() {
-    int a = 120;
+    int a = 190;
     BTree *tree1 = make_btree(
             (int[]) {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200}, 20, 2,
             sizeof(int), &compare_int);
