@@ -1,3 +1,18 @@
+/*
+** February 23, 2022
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+** This file implements an interface for polymorphic B-Trees of
+** arbitrary order.
+*/
+
 #ifndef NBTREE_BTREE_H
 #define NBTREE_BTREE_H
 
@@ -24,12 +39,8 @@ Loc *inorder_successor(Node *, void *, int(*)(const void *, const void *));
 
 void insert(BTree *, void *, int(*)(const void *, const void *));
 void preorder(Node *, void(*)(const void *));
-void transfer_key_right(Node *, uint32_t);
-void transfer_key_left(Node *, uint32_t);
 
 void *loc_key(Loc *);
 void *delete(BTree *, void *, int(*)(const void *, const void *));
-
-void test(Node *, void *, int(*)(const void *, const void *));
 
 #endif //NBTREE_BTREE_H

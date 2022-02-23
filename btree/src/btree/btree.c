@@ -1,3 +1,18 @@
+/*
+** February 23, 2022
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+** This file implements algorithms for searching, inserting, and deleting
+** in polymorphic B-Trees of arbitrary order.
+*/
+
 #include <cslice.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -177,7 +192,7 @@ BTree *make_btree(void *keys, uint32_t num_keys, uint32_t min_order, size_t key_
     return tree;
 }
 
-Loc *predecessor_helper(Loc *l) {
+static Loc *predecessor_helper(Loc *l) {
     Node *adjacent_left_child = (Node *) get_index(l->node->children, loc_index(l));
     while (!adjacent_left_child->leaf) {
         adjacent_left_child = (Node *) last(adjacent_left_child->children);
@@ -186,7 +201,7 @@ Loc *predecessor_helper(Loc *l) {
                key_index((void *) last(adjacent_left_child->data), len(adjacent_left_child->data) - 1));
 }
 
-Loc *inorder_predecessor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+static Loc *inorder_predecessor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
     Loc *l = search(root, key, cmpfunc);
     if (!l->kx) {
         printf("cannot find inorder predecessor of nonexistent node!\n");
@@ -196,7 +211,7 @@ Loc *inorder_predecessor(Node *root, void *key, int(*cmpfunc)(const void *, cons
     return predecessor_helper(loc(root, l->kx));
 }
 
-Loc *successor_helper(Loc *l) {
+static Loc *successor_helper(Loc *l) {
     Node *adjacent_right_child = (Node *) get_index(l->node->children, loc_index(l) + 1);
     while (!adjacent_right_child->leaf) {
         adjacent_right_child = (Node *) first(adjacent_right_child->children);
@@ -205,7 +220,7 @@ Loc *successor_helper(Loc *l) {
     return loc(adjacent_right_child, key_index((void *) first(adjacent_right_child->data), 0));
 }
 
-Loc *inorder_successor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
+static Loc *inorder_successor(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
     Loc *l = search(root, key, cmpfunc);
     if (!l->kx) {
         printf("cannot find inorder successor of nonexistent node!\n");
@@ -225,14 +240,14 @@ void preorder(Node *root, void(*printfunc)(const void *)) {
     }
 }
 
-static void transfer_key_left(Node *root, uint32_t index) {
-    Node *sender = (Node *) get_index(root->children, index + 1);
-    Node *receiver = (Node *) get_index(root->children, index);
+static void transfer_key_left(Node **root, uint32_t index) {
+    Node *sender = (Node *) get_index((*root)->children, index + 1);
+    Node *receiver = (Node *) get_index((*root)->children, index);
     void *key_to_promote = shift(sender->data);
-    void *key_to_demote = (void *) get_index(root->data, index);
+    void *key_to_demote = (void *) get_index((*root)->data, index);
     push(receiver->data, key_to_demote);
     if (len(sender->children) > 0) push(receiver->children, shift(sender->children));
-    set_index(root->data, key_to_promote, index);
+    set_index((*root)->data, key_to_promote, index);
 }
 
 static void transfer_key_right(Node **root, uint32_t index) {
@@ -336,7 +351,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
                 if (len(root_ci_left->data) >= root_ci_left->order) {
                     transfer_key_right(root, index);
                 } else if (len(root_ci_right->data) >= root_ci_right->order) {
-                    transfer_key_left(*root, index);
+                    transfer_key_left(root, index);
                 } else {
                     push(root_ci_left->data, remove_index((*root)->data, index - 1));
                     join(root_ci_left->data, root_ci->data);
@@ -362,7 +377,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
                 if (len(root_ci_right->data) >= root_ci_right->order) {
                     // if we are here, we need to donate a key from the immediate right sibling to the node being
                     // descended to
-                    transfer_key_left(*root, index);
+                    transfer_key_left(root, index);
                 } else {
                     push(root_ci->data, remove_index((*root)->data, index));
                     join(root_ci->data, root_ci_right->data);
