@@ -89,10 +89,6 @@ static bool full(Node *n) {
     return len(n->data) == 2 * n->order - 1;
 }
 
-void test_print(const void *key) {
-    printf("%d\t", *(int *) key);
-}
-
 Loc *search(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
     KeyIndex *kx = find_index(root->data, key, cmpfunc);
     if (kx_key(kx)) return loc(root, kx);
