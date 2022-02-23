@@ -262,7 +262,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
         return remove_index((*root)->data, index);
     }
     if (!kx_key(kx) && (*root)->leaf) {
-        printf("key not found!");
+        printf("key not found!\n");
         return NULL;
     }
     // CASE 2
@@ -270,7 +270,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
     //      1. if the child that precedes the key (root->children[index]) has a length greater than or equal to the
     //         minimum order of the tree, then we need to find the inorder predecessor inorder_p in the subtree rooted
     //         at root->children[index]. Otherwise,
-    //      2. if the child that succeeds the key (root->children[index+1] has a length greater than or equal to the
+    //      2. if the child that succeeds the key (root->children[index+1]) has a length greater than or equal to the
     //         minimum order of the tree, then we need to find the inorder successor inorder_s in the subtree rooted
     //         at root->children[index+1]. Otherwise,
     //      3. if neither the child preceding the key nor the child succeeding the key have sufficient keys to proceed
@@ -310,6 +310,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
             join(data_builder, root_ci_right->data);
             if (len(root_ci->children) > 0) join(root_ci->children, root_ci_right->children);
             if (len((*root)->data) == 0) *root = root_ci;
+            else remove_index((*root)->children, index + 1);
             return single_pass_delete(root, key, cmpfunc);
         }
     } else {
@@ -345,6 +346,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
                     join(root_ci_left->data, root_ci->data);
                     if (len(root_ci_left->children) > 0) join(root_ci_left->children, root_ci->children);
                     if (len((*root)->data) == 0) *root = root_ci_left;
+                    else remove_index((*root)->children, index);
                     return single_pass_delete(root, key, cmpfunc);
                 }
             } else if (root_ci_left) {
@@ -355,9 +357,9 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
                 } else {
                     push(root_ci_left->data, remove_index((*root)->data, index - 1));
                     join(root_ci_left->data, root_ci->data);
-
                     if (len(root_ci_left->children) > 0) join(root_ci_left->children, root_ci->children);
                     if (len((*root)->data) == 0) *root = root_ci_left;
+                    else remove_index((*root)->children, index);
                     return single_pass_delete(root, key, cmpfunc);
                 }
             } else {
@@ -371,6 +373,7 @@ static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void
 
                     if (len(root_ci->children) > 0) join(root_ci->children, root_ci_right->children);
                     if (len((*root)->data) == 0) *root = root_ci;
+                    else remove_index((*root)->children, index + 1);
                     return single_pass_delete(root, key, cmpfunc);
                 }
             }
