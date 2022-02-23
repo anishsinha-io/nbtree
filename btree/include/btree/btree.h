@@ -2,6 +2,7 @@
 #define NBTREE_BTREE_H
 
 #include <stdint.h>
+#include <cslice.h>
 
 typedef struct Node Node;
 typedef struct BTree BTree;
@@ -11,6 +12,8 @@ uint32_t loc_index(Loc *);
 
 BTree *btree(uint32_t);
 BTree *make_btree(void *, uint32_t, uint32_t, size_t, int(*)(const void *, const void *));
+
+Slice *data(Node *);
 
 Node *root(BTree *);
 Node *loc_node(Loc *);

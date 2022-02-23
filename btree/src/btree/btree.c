@@ -20,6 +20,10 @@ typedef struct Loc {
     KeyIndex *kx;
 } Loc;
 
+Slice *data(Node *n) {
+    return n->data;
+}
+
 uint32_t loc_index(Loc *l) {
     return kx_index(l->kx);
 }
@@ -216,8 +220,9 @@ Loc *inorder_successor(Node *root, void *key, int(*cmpfunc)(const void *, const 
 }
 
 void preorder(Node *root, void(*printfunc)(const void *)) {
-    if (root) {
+    if (len(root->data) > 0) {
         print(root->data, printfunc);
+        if (len(root->children) < 1) return;
         for (int i = 0; i < len(root->children); i++) {
             preorder((Node *) get_index(root->children, i), printfunc);
         }
@@ -234,116 +239,146 @@ static void transfer_key_left(Node *root, uint32_t index) {
     set_index(root->data, key_to_promote, index);
 }
 
-static void transfer_key_right(Node *root, uint32_t index) {
-    Node *sender = (Node *) get_index(root->children, index - 1);
-    Node *receiver = (Node *) get_index(root->children, index);
+static void transfer_key_right(Node **root, uint32_t index) {
+    Node *sender = (Node *) get_index((*root)->children, index - 1);
+    Node *receiver = (Node *) get_index((*root)->children, index);
     void *key_to_promote = pop(sender->data);
-    void *key_to_demote = (void *) get_index(root->data, index - 1);
+    void *key_to_demote = (void *) get_index((*root)->data, index - 1);
     unshift(receiver->data, key_to_demote);
     if (len(sender->children) > 0) unshift(receiver->children, pop(sender->children));
-    set_index(root->data, key_to_promote, index - 1);
+    set_index((*root)->data, key_to_promote, index - 1);
 }
 
-static void *single_pass_delete(Node *root, void *key, int(*cmpfunc)(const void *, const void *)) {
-    KeyIndex *kx = find_index(root->data, key, cmpfunc);
-    if (root->leaf && !kx_key(kx)) return NULL;
-    if (root->leaf && kx_key(kx)) {
-        return remove_index(root->data, kx_index(kx));
+static void *single_pass_delete(Node **root, void *key, int(*cmpfunc)(const void *, const void *)) {
+    // search for the key in a node called root.
+    KeyIndex *kx = find_index((*root)->data, key, cmpfunc);
+    // we will use index a lot, so i'm saving it into a variable.
+    uint32_t index = kx_index(kx);
+    // CASE 1
+    // if we found the key in a leaf node then we can just remove and return it. leaves don't have children so there's
+    // nothing to worry about there. If we're at a leaf node, and we haven't found the key, we can just return a null
+    // pointer.
+    if (kx_key(kx) && (*root)->leaf) {
+        return remove_index((*root)->data, index);
     }
-    Node *root_ci = (Node *) get_index(root->children, kx_index(kx));
-    Node *root_ci_left = (Node *) get_index(root->children, kx_index(kx) - 1);
-    Node *root_ci_right = (Node *) get_index(root->children, kx_index(kx) + 1);
-
+    if (!kx_key(kx) && (*root)->leaf) {
+        printf("key not found!");
+        return NULL;
+    }
+    // CASE 2
+    // if we found the key in an internal node (root), we need to take the following steps:
+    //      1. if the child that precedes the key (root->children[index]) has a length greater than or equal to the
+    //         minimum order of the tree, then we need to find the inorder predecessor inorder_p in the subtree rooted
+    //         at root->children[index]. Otherwise,
+    //      2. if the child that succeeds the key (root->children[index+1] has a length greater than or equal to the
+    //         minimum order of the tree, then we need to find the inorder successor inorder_s in the subtree rooted
+    //         at root->children[index+1]. Otherwise,
+    //      3. if neither the child preceding the key nor the child succeeding the key have sufficient keys to proceed
+    //         with steps 1 or 2, then we must merge the data in the root with the left child, then the data in the
+    //         right child with the left child. then we remove the right child from root's array of child pointers, and
+    //         if the root no longer has any keys, we set the left child as the new root. if the left child has more
+    //         than zero children, then the right child must also have more than zero children, so we must merge the
+    //         left child's children with the right child's children.
     if (kx_key(kx)) {
-        // any key which is in a non-leaf node will have an inorder predecessor and successor.
-        Loc *inorder_p = inorder_predecessor(root, key, cmpfunc);
-        Loc *inorder_s = inorder_successor(root, key, cmpfunc);
-        if (len(root_ci->data) >= inorder_p->node->order) {
-            const void *pred = last(inorder_p->node->data);
-            void *deleted_key = single_pass_delete(root, (void *) pred, cmpfunc);
-            set_index(root->data, (void *) deleted_key, kx_index(kx));
-            return deleted_key;
-        } else if (len(root_ci_right->data) >= inorder_p->node->order) {
-            const void *succ = first(inorder_s->node->data);
-            void *deleted_key = single_pass_delete(root, (void *) succ, cmpfunc);
-            set_index(root->data, (void *) deleted_key, kx_index(kx));
-            return deleted_key;
+        Node *root_ci = (Node *) get_index((*root)->children, index);
+        Node *root_ci_right = (Node *) get_index((*root)->children, index + 1);
+        if (len(root_ci->data) >= root_ci->order) {
+            // CASE 2.1
+            // find the inorder predecessor
+            Loc *inorder_p = inorder_predecessor(*root, key, cmpfunc);
+            // then recursively delete the key again.
+            single_pass_delete(root, loc_key(inorder_p), cmpfunc);
+            set_index((*root)->data, loc_key(inorder_p), index);
+            return kx_key(kx);
+        } else if (len(root_ci_right->data) >= root_ci_right->order) {
+            // CASE 2.2
+            // find the inorder successor
+            Loc *inorder_s = inorder_successor((*root), key, cmpfunc);
+            // then recursively delete the key again
+            single_pass_delete(root, loc_key(inorder_s), cmpfunc);
+            set_index((*root)->data, loc_key(inorder_s), index);
+            return kx_key(kx);
         } else {
-            print(root->data, &test_print);
-            print(root_ci->data, &test_print);
-            // print(root_ci_left->data, &test_print);
-            print(root_ci_right->data, &test_print);
-            push(root_ci->data, remove_index(root->data, kx_index(kx)));
-            join(root_ci->data, root_ci_right->data);
-            if (len(root_ci->children) > 0) {
-                join(root_ci->children, root_ci_right->children);
-            }
-            if (len(root->data) == 0) {
-                root = root_ci;
-                remove_index(root_ci->children, kx_index(kx) + 1);
-            }
+            // CASE 2.3
+            // neither the immediate left nor right child to the key found in root have sufficient keys to perform the
+            // above steps. therefore, we need to merge root_ci->data, root->data, and root_ci_right->data around the
+            // key to be deleted and then recursively delete the key from there. if the root's length becomes zero,
+            // then we reassign the root to be root_ci.
+            // create the data
+            Slice *data_builder = root_ci->data;
+            push(data_builder, remove_index((*root)->data, index));
+            join(data_builder, root_ci_right->data);
+            if (len(root_ci->children) > 0) join(root_ci->children, root_ci_right->children);
+            if (len((*root)->data) == 0) *root = root_ci;
             return single_pass_delete(root, key, cmpfunc);
         }
-    }
-    if (len(root_ci->data) < root_ci->order) {
-        if (kx_index(kx) != 0 && kx_index(kx) < len(root->data)) {
-            // here if the child (root sub c(i)) has both children
-            if (len(root_ci_left->data) >= root_ci_left->order) {
-                transfer_key_right(root, kx_index(kx));
-            } else if (len(root_ci_right->data) >= root_ci_right->order) {
-                // if (root sub c(i))'s right sibling has a spare key to donate
-                transfer_key_left(root, kx_index(kx));
+    } else {
+        // CASE 3
+        // if we don't find the key in root we proceed with the following. we first determine the root (root sub c_i)
+        // that is the root of the subtree that must contain the key. This is root_ci in our case. If root_ci only has
+        // root_ci->order-1 keys (the minimum), we need to proceed with steps 3.1 or 3.2 to guarantee that we descend
+        // to a node that contains at least root_ci->order keys.
 
-            } else {
-                // if neither of (root sub c(i))'s immediate siblings have spare keys, we need to merge it with either
-                // its left or right sibling. in this case we will always merge right, to keep things simple.
-                push(root_ci->data, remove_index(root->data, kx_index(kx)));
-                join(root_ci->data, root_ci_right->data);
-                remove_index(root->children, kx_index(kx) + 1);
-                if (len(root_ci_right->children) > 0) join(root_ci->children, root_ci_right->children);
-            }
-        } else {
-            // here if the child (root sub c(i)) has only one child
-            if (root_ci_left) {
-                // if the only sibling is the left one
-                if (len(root_ci_left->data) > root_ci_left->order) {
-                    // here if the only left sibling has the required number of children
-                    transfer_key_right(root, kx_index(kx));
+        Node *root_ci = (Node *) get_index((*root)->children, index);
 
+        // immediate left sibling
+        Node *root_ci_left = (Node *) get_index((*root)->children, index - 1);
+
+        // immediate right sibling
+        Node *root_ci_right = (Node *) get_index((*root)->children, index + 1);
+        // we may have cases where root_ci is the first or last child, in which case there will only be one sibling.
+        // however, there will never be a case in which there is no sibling, because that would violate one of the
+        // constraints of a B-Tree, that is that all leaf nodes must be on the same level.
+
+        // the first if statement handles the case where both siblings of root_ci are defined. the second handles the
+        // case where only the left sibling is defined and the last handles the case where only the right sibling is
+        // defined
+
+        if (len(root_ci->data) < root_ci->order) {
+            if (root_ci_left && root_ci_right) {
+                if (len(root_ci_left->data) >= root_ci_left->order) {
+                    transfer_key_right(root, index);
+                } else if (len(root_ci_right->data) >= root_ci_right->order) {
+                    transfer_key_left(*root, index);
                 } else {
-                    // here if the only left sibling has fewer than the required number of children. if this is the
-                    // case, then we need to merge root_ci with root and root_ci_left.
-                    unshift(root_ci->data, remove_index(root->data, kx_index(kx) - 1));
+                    push(root_ci_left->data, remove_index((*root)->data, index - 1));
                     join(root_ci_left->data, root_ci->data);
-                    root_ci->data = root_ci_left->data;
-                    if (len(root_ci_left->children) > 0) {
-                        Slice *new_children = join(root_ci_left->children, root_ci->children);
-                        root->children = new_children;
-                    }
-                    remove_index(root->children, kx_index(kx));
+                    if (len(root_ci_left->children) > 0) join(root_ci_left->children, root_ci->children);
+                    if (len((*root)->data) == 0) *root = root_ci_left;
+                    return single_pass_delete(root, key, cmpfunc);
                 }
-            } else if (root_ci_right) {
-                // if the only sibling is the right one
-                if (len(root_ci_right->data) > root_ci_right->order) {
-                    // here if the only right sibling has the required number of children
-                    transfer_key_left(root, kx_index(kx));
+            } else if (root_ci_left) {
+                if (len(root_ci_left->data) >= root_ci_left->order) {
+                    // if we are here, we need to donate a key from the immediate left sibling to the node being
+                    // descended to
+                    transfer_key_right(root, index);
                 } else {
-                    // here if the only right sibling has fewer than the required number of children. if this is the
-                    // case, then we need to merge root_ci with root and root_ci_right.
-                    push(root_ci->data, remove_index(root->data, kx_index(kx)));
+                    push(root_ci_left->data, remove_index((*root)->data, index - 1));
+                    join(root_ci_left->data, root_ci->data);
+
+                    if (len(root_ci_left->children) > 0) join(root_ci_left->children, root_ci->children);
+                    if (len((*root)->data) == 0) *root = root_ci_left;
+                    return single_pass_delete(root, key, cmpfunc);
+                }
+            } else {
+                if (len(root_ci_right->data) >= root_ci_right->order) {
+                    // if we are here, we need to donate a key from the immediate right sibling to the node being
+                    // descended to
+                    transfer_key_left(*root, index);
+                } else {
+                    push(root_ci->data, remove_index((*root)->data, index));
                     join(root_ci->data, root_ci_right->data);
-                    if (len(root_ci_right->children) > 0) {
-                        Slice *new_children = join(root_ci->children, root_ci_right->children);
-                        root->children = new_children;
-                    }
-                    root->data = root_ci->data;
+
+                    if (len(root_ci->children) > 0) join(root_ci->children, root_ci_right->children);
+                    if (len((*root)->data) == 0) *root = root_ci;
+                    return single_pass_delete(root, key, cmpfunc);
                 }
             }
         }
+        return single_pass_delete(&root_ci, key, cmpfunc);
     }
-    return single_pass_delete(root_ci, key, cmpfunc);
 }
 
 void *delete(BTree *tree, void *key, int(*cmpfunc)(const void *, const void *)) {
-    return single_pass_delete(tree->root, key, cmpfunc);
+    return single_pass_delete(&(tree->root), key, cmpfunc);
 }

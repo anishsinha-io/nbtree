@@ -19,14 +19,28 @@ int compare_int(const void *first, const void *second) {
     return *(int *) first - *(int *) second;
 }
 
+void diagnose(BTree *tree) {
+    printf("PREORDER: \n");
+    preorder(root(tree), &print_int);
+    printf("ROOT: \n");
+    print(data(root(tree)), &print_int);
+    printf("-------------------------------\n");
+}
+
 int main() {
-    int a = 7;
+    int a = 12;
+    int b = 8;
+    int c = 30;
     BTree *tree1 = make_btree(
-            (int[]) {10, 9, 8, 7, 6, 5, 4, 3, 2}, 9, 2,
+            (int[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+                     28, 29, 30}, 30, 2,
             sizeof(int), &compare_int);
-    preorder(root(tree1), &print_int);
-    printf("\n");
+    diagnose(tree1);
     delete(tree1, &a, &compare_int);
-    preorder(root(tree1), &print_int);
+    diagnose(tree1);
+    delete(tree1, &b, &compare_int);
+    diagnose(tree1);
+    delete(tree1, &c, &compare_int);
+    diagnose(tree1);
     return 0;
 }
